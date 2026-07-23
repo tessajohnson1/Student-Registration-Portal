@@ -208,62 +208,93 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate random token
+    // Generate reset token
+    const crypto = require("crypto");
     const resetToken = crypto.randomBytes(32).toString("hex");
 
-    // Save token and expiry in database
+    // Save token and expiry
     student.resetPasswordToken = resetToken;
     student.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     await student.save();
+
     console.log("EMAIL_USER:", process.env.EMAIL_USER);
-    console.log("EMAIL_PASS length:", process.env.EMAIL_PASS?.length);
+    console.log("EMAIL_PASS Length:", process.env.EMAIL_PASS?.length);
 
-    // Configure Gmail transporter
+    // Create Gmail transporter
     const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+});
 
-    // Reset URL
-    const resetURL = `http://localhost:5173/reset-password/${resetToken}`;
+await transporter.verify();
+console.log("✅ SMTP connection successful");
 
-    // Email content
+    // Frontend URL
+    const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+    // Email
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: student.email,
       subject: "Password Reset Request",
       html: `
         <h2>Password Reset</h2>
-        <p>Hello ${student.name},</p>
-        <p>Click the link below to reset your password:</p>
 
-        <a href="${resetURL}">
-          ${resetURL}
+        <p>Hello ${student.name},</p>
+
+        <p>Click the button below to reset your password.</p>
+
+        <a href="${resetURL}"
+           style="
+             background:#007bff;
+             color:white;
+             padding:10px 20px;
+             text-decoration:none;
+             border-radius:5px;
+             display:inline-block;
+           ">
+           Reset Password
         </a>
+
+        <br><br>
+
+        <p>Or copy this link into your browser:</p>
+
+        <p>${resetURL}</p>
 
         <p>This link will expire in 10 minutes.</p>
       `,
     };
 
-    // Send email
-await transporter.sendMail(mailOptions);
+    console.log("Sending email...");
 
-res.status(200).json({
-  message: "Password reset link sent to email",
-});
+    await transporter.sendMail(mailOptions);
 
-} catch (error) {
-  console.error("Forgot Password Error:", error);
+    console.log("Email sent successfully!");
 
-  res.status(500).json({
-    message: error.message,
-  });
-}
-};   // <-- THIS IS THE MISSING ONE
+    res.status(200).json({
+      success: true,
+      message: "Password reset link sent successfully.",
+    });
+
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // Reset Password
 const resetPassword = async (req, res) => {
